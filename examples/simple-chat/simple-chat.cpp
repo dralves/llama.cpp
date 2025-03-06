@@ -7,14 +7,15 @@
 
 static void print_usage(int, char ** argv) {
     printf("\nexample usage:\n");
-    printf("\n    %s -m model.gguf [-c context_size] [-ngl n_gpu_layers]\n", argv[0]);
+    printf("\n    %s -m model.gguf [-c context_size] [-ngl n_gpu_layers] [-s seed]\n", argv[0]);
     printf("\n");
 }
 
 int main(int argc, char ** argv) {
     std::string model_path;
-    int ngl = 99;
+    int ngl = 0;     // Force 0 GPU layers for CPU-only
     int n_ctx = 2048;
+    int seed = 0;    // For deterministic seed
 
     // parse command line arguments
     for (int i = 1; i < argc; i++) {
@@ -36,6 +37,13 @@ int main(int argc, char ** argv) {
             } else if (strcmp(argv[i], "-ngl") == 0) {
                 if (i + 1 < argc) {
                     ngl = std::stoi(argv[++i]);
+                } else {
+                    print_usage(argc, argv);
+                    return 1;
+                }
+            } else if (strcmp(argv[i], "-s") == 0) {
+                if (i + 1 < argc) {
+                    seed = std::stoi(argv[++i]);
                 } else {
                     print_usage(argc, argv);
                     return 1;
@@ -67,7 +75,7 @@ int main(int argc, char ** argv) {
 
     // initialize the model
     llama_model_params model_params = llama_model_default_params();
-    model_params.n_gpu_layers = ngl;
+    model_params.n_gpu_layers = ngl;  // 0 => CPU-only
 
     llama_model * model = llama_model_load_from_file(model_path.c_str(), model_params);
     if (!model) {
@@ -79,8 +87,9 @@ int main(int argc, char ** argv) {
 
     // initialize the context
     llama_context_params ctx_params = llama_context_default_params();
-    ctx_params.n_ctx = n_ctx;
-    ctx_params.n_batch = n_ctx;
+    ctx_params.n_ctx     = n_ctx;
+    ctx_params.n_batch   = n_ctx;
+    ctx_params.n_threads = 1;  // 1 => fully deterministic summations, no parallel floating ops
 
     llama_context * ctx = llama_init_from_model(model, ctx_params);
     if (!ctx) {
@@ -90,9 +99,15 @@ int main(int argc, char ** argv) {
 
     // initialize the sampler
     llama_sampler * smpl = llama_sampler_chain_init(llama_sampler_chain_default_params());
-    llama_sampler_chain_add(smpl, llama_sampler_init_min_p(0.05f, 1));
-    llama_sampler_chain_add(smpl, llama_sampler_init_temp(0.8f));
-    llama_sampler_chain_add(smpl, llama_sampler_init_dist(LLAMA_DEFAULT_SEED));
+
+    // remove or comment out any llama_sampler_init_min_p(...) or dryness modules
+    // so we do purely greedy picks with no stochastics beyond the final distribution:
+    // e.g. llama_sampler_chain_add(smpl, llama_sampler_init_min_p(0.05f, 1)); // remove
+    llama_sampler_chain_add(smpl, llama_sampler_init_temp(0.0f)); // pure greedy
+    if (seed == 0) {
+        seed = 1234;  // or any fixed integer
+    }
+    llama_sampler_chain_add(smpl, llama_sampler_init_dist(seed));
 
     // helper function to evaluate a prompt and generate a response
     auto generate = [&](const std::string & prompt) {
