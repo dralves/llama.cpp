@@ -8,6 +8,26 @@
 #include <string>
 #include <stdexcept>
 #include <limits>     // for std::numeric_limits<int>::max()
+#include <iomanip>    // for std::setprecision, etc.
+#include <chrono>      // optionally for build timestamp (if you want to embed date/time)
+#include <sstream>    // for capturing tokens/sec logs if needed
+#include <mutex>      // if you want thread-safe logging
+
+// EXAMPLE: llama_log_callback signature:
+//   void my_custom_logger(void * user_data, llama_log_level level, const char * message);
+
+// Add forward declaration of our custom logger:
+static std::ofstream  g_combined_log; // file stream for combined logging
+
+static void my_custom_logger(ggml_log_level level, const char * message, void * /*user_data*/) {
+    // Print to console
+    std::cout << message;
+
+    // Also to file
+    if (g_combined_log.is_open()) {
+        g_combined_log << message;
+    }
+}
 
 int main(int argc, char **argv) {
     // Parse command line flags (the same approach used in server.cpp).
@@ -22,8 +42,20 @@ int main(int argc, char **argv) {
     llama_backend_init();
     llama_numa_init(params.numa);
 
+    // ------------------------------------------------------------------
+    // 1) Open a combined log file for the custom logger
+    g_combined_log.open("determinism_results.txt");
+    if (!g_combined_log.is_open()) {
+        std::cerr << "Error: cannot open combined_log.txt for logging.\n";
+        return 1;
+    }
+    llama_log_set(my_custom_logger, /*user_data=*/nullptr);
+
     // Load the model from the parsed flags
     std::cout << "Loading model: " << params.model << std::endl;
+
+    // This might appear in your logs or output file
+
     common_init_result init_result = common_init_from_params(params);
     if (!init_result.model || !init_result.context) {
         std::cerr << "Error: Unable to load the model.\n";
@@ -53,12 +85,26 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    // REMOVE references to outFile. Instead, log with my_custom_logger.
+    // For example, we print the param summary:
+    {
+        std::stringstream ss;
+        ss << "== Determinism Test Parameters ==\n"
+           << "model       : " << params.model << "\n"
+           << "n_batch     : " << params.n_batch << "\n"
+           << "n_predict   : " << params.n_predict << "\n"
+           << "seed        : " << params.sampling.seed << "\n"
+           << "temperature : " << params.sampling.temp << "\n"
+           << "----------------------------------\n\n";
+
+        my_custom_logger(GGML_LOG_LEVEL_INFO, ss.str().c_str(), nullptr);
+    }
+
     // Keep a running "sessionTokens" vector that contains all tokens generated so far.
-    // Each new line from the file will be appended to this context, then we generate more text.
     std::vector<llama_token> sessionTokens;
     int n_ctx = llama_n_ctx(ctx);
 
-    // Decide how many new tokens are allowed to be generated per line
+    // Decide how many new tokens are allowed to be generated per line:
     int max_new_tokens = (params.n_predict < 0)
         ? std::numeric_limits<int>::max()
         : params.n_predict;
@@ -66,13 +112,18 @@ int main(int argc, char **argv) {
     std::string line;
     // Read the file line by line
     while (std::getline(infile, line)) {
-        // Skip empty lines if you want
         if (line.empty()) {
             continue;
         }
 
-        // Tokenize this new line. We also add "special" tokens if needed.
-        // That way each line can be recognized as separate or as part of the conversation.
+        // Instead of outFile, log prompt using my_custom_logger:
+        {
+            std::stringstream ss;
+            ss << "Prompt: " << line << "\n";
+            my_custom_logger(GGML_LOG_LEVEL_INFO, ss.str().c_str(), nullptr);
+        }
+
+        // Tokenize this new line
         std::vector<llama_token> newTokens = common_tokenize(vocab, line, /* add_special= */ true);
         if (newTokens.empty()) {
             continue;
@@ -110,6 +161,11 @@ int main(int argc, char **argv) {
         std::cout << "\n[Generating after line: \"" << line << "\"]\n";
 
         std::string generated_text;
+
+        // For logging logits in one line, store (token, logit) as we generate
+        std::vector<std::pair<llama_token, float>> generated_logits;
+
+        // Generate tokens in response
         for (int i = 0; i < max_new_tokens; i++) {
             int n_past = llama_get_kv_cache_token_count(ctx);
             if (n_past + 1 >= n_ctx) {
@@ -147,6 +203,31 @@ int main(int argc, char **argv) {
                 }
                 llama_batch_free(batch_next);
             }
+
+            // For single-line logits logging:
+            const float* logits = llama_get_logits(ctx);
+            if (logits) {
+                generated_logits.emplace_back(id, logits[id]);
+            }
+        }
+
+        // Write the final response.
+        {
+            std::stringstream ss;
+            ss << "Response: " << generated_text << "\n";
+            my_custom_logger(GGML_LOG_LEVEL_INFO, ss.str().c_str(), nullptr);
+        }
+
+        // Output all logits in one single line
+        {
+            std::stringstream ss;
+            ss << "Logits: ";
+            for (auto & [tok, logit] : generated_logits) {
+                ss << tok << ":" << std::fixed << std::setprecision(6)
+                   << logit << " ";
+            }
+            ss << "\n\n";
+            my_custom_logger(GGML_LOG_LEVEL_INFO, ss.str().c_str(), nullptr);
         }
 
         std::cout << "\n[End of line generation]\n";
@@ -155,7 +236,14 @@ int main(int argc, char **argv) {
     infile.close();
     common_sampler_free(smpl);
 
+
+    // Close the combined log
+    g_combined_log.close();
+
+    // ------------------------------------------------------------------
     // Clean up llama-related resources
     llama_backend_free();
+
+
     return 0;
 }
