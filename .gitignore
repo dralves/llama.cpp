@@ -146,3 +146,6 @@ poetry.toml
 # Local scripts
 /run-vim.sh
 /run-chat.sh
+
+# Determinism test results
+determinism_results*
