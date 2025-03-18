@@ -20,7 +20,7 @@ else()
     add_subdirectory(batched)
     add_subdirectory(embedding)
     add_subdirectory(eval-callback)
-
+    add_subdirectory(determinism-test)
     if (NOT WIN32)
         # disabled on Windows because it uses internal functions not exported with LLAMA_API
         add_subdirectory(gbnf-validator)
