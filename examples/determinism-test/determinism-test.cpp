@@ -195,6 +195,17 @@ int main(int argc, char ** argv) {
         my_custom_logger(GGML_LOG_LEVEL_INFO, ss.str().c_str(), nullptr);
     }
 
+    // Instead, create the sampler the same way server.cpp does:
+    common_sampler * smpl = common_sampler_init(model, params.sampling);
+    if (!smpl) {
+        std::cerr << "Error: could not create sampler.\n";
+        return 1;
+    }
+
+    // Keep a running "sessionTokens" vector that contains all tokens generated so far.
+    //std::vector<llama_token> sessionTokens;
+    //int n_ctx = llama_n_ctx(ctx);
+
     // We'll run the entire logic of reading prompts "repeatCount" times
     for (int rep = 0; rep < repeatCount; rep++) {
         std::cerr << "== Iteration " << (rep + 1) << " of " << repeatCount << " ==\n";
@@ -204,17 +215,6 @@ int main(int argc, char ** argv) {
             std::cerr << "Error: cannot open " << params.prompt_file << "\n";
             return 1;
         }
-
-        // Instead, create the sampler the same way server.cpp does:
-        common_sampler * smpl = common_sampler_init(model, params.sampling);
-        if (!smpl) {
-            std::cerr << "Error: could not create sampler.\n";
-            return 1;
-        }
-
-        // Keep a running "sessionTokens" vector that contains all tokens generated so far.
-        std::vector<llama_token> sessionTokens;
-        int                      n_ctx = llama_n_ctx(ctx);
 
         // Decide how many new tokens are allowed to be generated per line:
         int max_new_tokens = (params.n_predict < 0) ? std::numeric_limits<int>::max() : params.n_predict;
@@ -363,72 +363,71 @@ int main(int argc, char ** argv) {
         double     tps        = (elapsed_s > 0.0) ? double(n_decode) / elapsed_s : 0.0;
 
         fprintf(stderr, "\n%s: decoded %d tokens in %.2f s, speed: %.2f t/s\n", __func__, n_decode, elapsed_s, tps);
+    }
 
-        // Compute the "hash-of-hashes" for prompts, responses, and logits.
-        // That is, for each category we combine all hash strings into one big string, then run SHA-256 on it.
+    // Compute the "hash-of-hashes" for prompts, responses, and logits.
+    // That is, for each category we combine all hash strings into one big string, then run SHA-256 on it.
+    {
+        // 1) prompt final hash-of-hashes
+        std::string all_prompt_hash;
+        all_prompt_hash.reserve(prompt_hashes.size() * (SHA256_DIGEST_SIZE * 2));
+        for (auto & h : prompt_hashes) {
+            all_prompt_hash += h;  // just append all hex hash strings
+        }
         {
-            // 1) prompt final hash-of-hashes
-            std::string all_prompt_hash;
-            all_prompt_hash.reserve(prompt_hashes.size() * (SHA256_DIGEST_SIZE * 2));
-            for (auto & h : prompt_hashes) {
-                all_prompt_hash += h;  // just append all hex hash strings
-            }
-            {
-                unsigned char digest[SHA256_DIGEST_SIZE];
-                sha256_hash(digest, reinterpret_cast<const unsigned char *>(all_prompt_hash.data()),
-                            all_prompt_hash.size());
+            unsigned char digest[SHA256_DIGEST_SIZE];
+            sha256_hash(digest, reinterpret_cast<const unsigned char *>(all_prompt_hash.data()),
+                        all_prompt_hash.size());
 
-                std::stringstream ss;
-                ss << "Final Prompt Hash-of-Hashes: " << to_hex(digest) << "\n";
-                my_custom_logger(GGML_LOG_LEVEL_INFO, ss.str().c_str(), nullptr);
-            }
-
-            // 2) response final hash-of-hashes
-            std::string all_response_hash;
-            all_response_hash.reserve(response_hashes.size() * (SHA256_DIGEST_SIZE * 2));
-            for (auto & h : response_hashes) {
-                all_response_hash += h;
-            }
-            {
-                unsigned char digest[SHA256_DIGEST_SIZE];
-                sha256_hash(digest, reinterpret_cast<const unsigned char *>(all_response_hash.data()),
-                            all_response_hash.size());
-
-                std::stringstream ss;
-                ss << "Final Response Hash-of-Hashes: " << to_hex(digest) << "\n";
-                my_custom_logger(GGML_LOG_LEVEL_INFO, ss.str().c_str(), nullptr);
-            }
-
-            // 3) logits final hash-of-hashes
-            std::string all_logits_hash;
-            all_logits_hash.reserve(logits_hashes.size() * (SHA256_DIGEST_SIZE * 2));
-            for (auto & h : logits_hashes) {
-                all_logits_hash += h;
-            }
-            {
-                unsigned char digest[SHA256_DIGEST_SIZE];
-                sha256_hash(digest, reinterpret_cast<const unsigned char *>(all_logits_hash.data()),
-                            all_logits_hash.size());
-
-                std::stringstream ss;
-                ss << "Final Logits Hash-of-Hashes: " << to_hex(digest) << "\n";
-                my_custom_logger(GGML_LOG_LEVEL_INFO, ss.str().c_str(), nullptr);
-            }
+            std::stringstream ss;
+            ss << "Final Prompt Hash-of-Hashes: " << to_hex(digest) << "\n";
+            my_custom_logger(GGML_LOG_LEVEL_INFO, ss.str().c_str(), nullptr);
         }
 
-        // Print performance stats.
-        // (Optional) If you'd like sampler-level performance stats, you could add
-        // a custom call here, e.g. common_sampler_print_stats(smpl), if desired.
-        llama_perf_context_print(ctx);
+        // 2) response final hash-of-hashes
+        std::string all_response_hash;
+        all_response_hash.reserve(response_hashes.size() * (SHA256_DIGEST_SIZE * 2));
+        for (auto & h : response_hashes) {
+            all_response_hash += h;
+        }
+        {
+            unsigned char digest[SHA256_DIGEST_SIZE];
+            sha256_hash(digest, reinterpret_cast<const unsigned char *>(all_response_hash.data()),
+                        all_response_hash.size());
 
-        // Close the combined log
-        g_combined_log.close();
+            std::stringstream ss;
+            ss << "Final Response Hash-of-Hashes: " << to_hex(digest) << "\n";
+            my_custom_logger(GGML_LOG_LEVEL_INFO, ss.str().c_str(), nullptr);
+        }
 
-        // ------------------------------------------------------------------
-        // Clean up llama-related resources
-        common_sampler_free(smpl);
-        llama_backend_free();
+        // 3) logits final hash-of-hashes
+        std::string all_logits_hash;
+        all_logits_hash.reserve(logits_hashes.size() * (SHA256_DIGEST_SIZE * 2));
+        for (auto & h : logits_hashes) {
+            all_logits_hash += h;
+        }
+        {
+            unsigned char digest[SHA256_DIGEST_SIZE];
+            sha256_hash(digest, reinterpret_cast<const unsigned char *>(all_logits_hash.data()),
+                        all_logits_hash.size());
+
+            std::stringstream ss;
+            ss << "Final Logits Hash-of-Hashes: " << to_hex(digest) << "\n";
+            my_custom_logger(GGML_LOG_LEVEL_INFO, ss.str().c_str(), nullptr);
+        }
     }
+
+    // Print performance stats.
+    // (Optional) If you'd like sampler-level performance stats, you could add
+    // a custom call here, e.g. common_sampler_print_stats(smpl), if desired.
+    llama_perf_context_print(ctx);
+
+    // Close the combined log
+    g_combined_log.close();
+    // ------------------------------------------------------------------
+    // Clean up llama-related resources
+    common_sampler_free(smpl);
+    llama_backend_free();
 
     return 0;
 }
