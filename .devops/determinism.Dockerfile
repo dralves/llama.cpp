@@ -59,7 +59,7 @@ RUN mkdir -p /app/bin && cp build/bin/llama-determinism-test /app/
 # Also allow an environment variable for model file if you want.
 ENV MODEL_FILE=""
 ENV NGL="100"
-
+ENV REPEAT_COUNT="1"
 RUN apt-get update && \
     apt-get install -y libgomp1 curl \
     && mkdir -p /app/results \
@@ -76,7 +76,7 @@ RUN mkdir -p /app/prompts
 # Used to check if the binary has all the shared libs it needs
 # ENTRYPOINT ["/bin/bash", "-c", "ldd ./llama-determinism-test"]
 
-ENTRYPOINT ["/bin/bash", "-c", "set -e; echo '== Running determinism-test using $MODEL_FILE =='; ./llama-determinism-test -f /app/prompts/prompt1.txt --model $MODEL_FILE -o /app/results/results.txt --seed 42 -n 1000 --device $CUDA_DEVICES -ngl $NGL && echo '=== Output from results.txt ===' && cat /app/results/results.txt"]
+ENTRYPOINT ["/bin/bash", "-c", "set -e; echo '== Running determinism-test using $MODEL_FILE =='; ./llama-determinism-test -f /app/prompts/prompt1.txt --model $MODEL_FILE -o /app/results/results.txt --seed 42 -n 1000 --device $CUDA_DEVICES -ngl $NGL --repeat $REPEAT_COUNT && echo '=== Output from results.txt ===' && cat /app/results/results.txt"]
 
 # Run with:
 # docker run --rm \
