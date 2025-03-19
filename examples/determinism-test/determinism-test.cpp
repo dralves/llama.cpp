@@ -92,9 +92,9 @@ static std::string to_hex(const unsigned char * digest, size_t len = SHA256_DIGE
 int main(int argc, char ** argv) {
     // 1) We'll parse "-o" and now also parse "--repeat", removing them before calling common_params_parse.
     std::string outFileName = "determinism_results.txt";
-    int         repeatCount = 1; // default is 1 iteration
+    int         repeatCount = 1;  // default is 1 iteration
     {
-        int writeIndex = 1; // track how we shift argv
+        int writeIndex = 1;       // track how we shift argv
         for (int readIndex = 1; readIndex < argc; readIndex++) {
             std::string argStr = argv[readIndex];
             if (argStr == "-o") {
@@ -109,7 +109,7 @@ int main(int argc, char ** argv) {
             } else if (argStr == "--repeat") {
                 // Check for next arg
                 if (readIndex + 1 < argc) {
-                    const char* rStr = argv[++readIndex];
+                    const char * rStr = argv[++readIndex];
                     try {
                         repeatCount = std::stoi(rStr);
                     } catch (...) {
@@ -175,6 +175,26 @@ int main(int argc, char ** argv) {
         return 1;
     }
 
+    // REMOVE references to outFile. Instead, log with my_custom_logger.
+    // For example, we print the param summary:
+    // NEW: We'll store all prompt hashes, response hashes, and logits hashes
+    std::vector<std::string> prompt_hashes;
+    std::vector<std::string> response_hashes;
+    std::vector<std::string> logits_hashes;
+
+    {
+        std::stringstream ss;
+        ss << "== Determinism Test Parameters ==\n"
+           << "model       : " << params.model << "\n"
+           << "n_batch     : " << params.n_batch << "\n"
+           << "n_predict   : " << params.n_predict << "\n"
+           << "seed        : " << params.sampling.seed << "\n"
+           << "temperature : " << params.sampling.temp << "\n"
+           << "----------------------------------\n\n";
+
+        my_custom_logger(GGML_LOG_LEVEL_INFO, ss.str().c_str(), nullptr);
+    }
+
     // We'll run the entire logic of reading prompts "repeatCount" times
     for (int rep = 0; rep < repeatCount; rep++) {
         std::cerr << "== Iteration " << (rep + 1) << " of " << repeatCount << " ==\n";
@@ -190,26 +210,6 @@ int main(int argc, char ** argv) {
         if (!smpl) {
             std::cerr << "Error: could not create sampler.\n";
             return 1;
-        }
-
-        // REMOVE references to outFile. Instead, log with my_custom_logger.
-        // For example, we print the param summary:
-        // NEW: We'll store all prompt hashes, response hashes, and logits hashes
-        std::vector<std::string> prompt_hashes;
-        std::vector<std::string> response_hashes;
-        std::vector<std::string> logits_hashes;
-
-        {
-            std::stringstream ss;
-            ss << "== Determinism Test Parameters ==\n"
-               << "model       : " << params.model << "\n"
-               << "n_batch     : " << params.n_batch << "\n"
-               << "n_predict   : " << params.n_predict << "\n"
-               << "seed        : " << params.sampling.seed << "\n"
-               << "temperature : " << params.sampling.temp << "\n"
-               << "----------------------------------\n\n";
-
-            my_custom_logger(GGML_LOG_LEVEL_INFO, ss.str().c_str(), nullptr);
         }
 
         // Keep a running "sessionTokens" vector that contains all tokens generated so far.
@@ -244,7 +244,8 @@ int main(int argc, char ** argv) {
                 continue;
             }
             std::vector<llama_token> line_tokens(n_src);
-            if (llama_tokenize(vocab, line.c_str(), line.size(), line_tokens.data(), line_tokens.size(), true, true) < 0) {
+            if (llama_tokenize(vocab, line.c_str(), line.size(), line_tokens.data(), line_tokens.size(), true, true) <
+                0) {
                 std::cerr << "Error: llama_tokenize returned negative.\n";
                 continue;
             }
@@ -342,7 +343,7 @@ int main(int argc, char ** argv) {
                     unsigned char digest[SHA256_DIGEST_SIZE];
                     sha256_hash(digest, reinterpret_cast<const unsigned char *>(logits_str.data()), logits_str.size());
 
-                    std::string logits_hex = to_hex(digest);
+                    std::string       logits_hex = to_hex(digest);
                     std::stringstream hss;
                     hss << "Logits Hash: " << logits_hex << "\n";
                     my_custom_logger(GGML_LOG_LEVEL_INFO, hss.str().c_str(), nullptr);
@@ -370,12 +371,11 @@ int main(int argc, char ** argv) {
             std::string all_prompt_hash;
             all_prompt_hash.reserve(prompt_hashes.size() * (SHA256_DIGEST_SIZE * 2));
             for (auto & h : prompt_hashes) {
-                all_prompt_hash += h; // just append all hex hash strings
+                all_prompt_hash += h;  // just append all hex hash strings
             }
             {
                 unsigned char digest[SHA256_DIGEST_SIZE];
-                sha256_hash(digest,
-                            reinterpret_cast<const unsigned char *>(all_prompt_hash.data()),
+                sha256_hash(digest, reinterpret_cast<const unsigned char *>(all_prompt_hash.data()),
                             all_prompt_hash.size());
 
                 std::stringstream ss;
@@ -391,8 +391,7 @@ int main(int argc, char ** argv) {
             }
             {
                 unsigned char digest[SHA256_DIGEST_SIZE];
-                sha256_hash(digest,
-                            reinterpret_cast<const unsigned char *>(all_response_hash.data()),
+                sha256_hash(digest, reinterpret_cast<const unsigned char *>(all_response_hash.data()),
                             all_response_hash.size());
 
                 std::stringstream ss;
@@ -408,8 +407,7 @@ int main(int argc, char ** argv) {
             }
             {
                 unsigned char digest[SHA256_DIGEST_SIZE];
-                sha256_hash(digest,
-                            reinterpret_cast<const unsigned char *>(all_logits_hash.data()),
+                sha256_hash(digest, reinterpret_cast<const unsigned char *>(all_logits_hash.data()),
                             all_logits_hash.size());
 
                 std::stringstream ss;
