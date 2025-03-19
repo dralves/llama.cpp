@@ -12,6 +12,7 @@
 #include "arg.h"     // from llama.cpp: for command-line argument parsing
 #include "common.h"  // from llama.cpp: for common_params, common_init_from_params, etc.
 #include "llama.h"   // from llama.cpp: for model and context APIs
+#include "sampling.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -184,17 +185,12 @@ int main(int argc, char ** argv) {
             return 1;
         }
 
-        // REPLACE custom_sampler usage with the same approach from simple.cpp:
-        // e.g. a sampler chain with a default (greedy) sampler. You can adapt for temperature, etc.
-        auto sparams         = llama_sampler_chain_default_params();
-        sparams.no_perf      = false;
-        llama_sampler * smpl = llama_sampler_chain_init(sparams);
-        if (smpl == nullptr) {
-            std::cerr << "Error: could not create sampler chain.\n";
+        // Instead, create the sampler the same way server.cpp does:
+        common_sampler * smpl = common_sampler_init(model, params.sampling);
+        if (!smpl) {
+            std::cerr << "Error: could not create sampler.\n";
             return 1;
         }
-        // For a simple greedy approach:
-        llama_sampler_chain_add(smpl, llama_sampler_init_greedy());
 
         // REMOVE references to outFile. Instead, log with my_custom_logger.
         // For example, we print the param summary:
@@ -265,7 +261,7 @@ int main(int argc, char ** argv) {
 
             for (int i = 0; i < max_new_tokens; i++) {
                 // sample next token
-                llama_token id = llama_sampler_sample(smpl, ctx, -1);
+                llama_token id = common_sampler_sample(smpl, ctx, -1);
                 if (llama_vocab_is_eog(vocab, id)) {
                     std::cout << "\n[Terminated: EOS token.]\n";
                     break;
@@ -423,7 +419,8 @@ int main(int argc, char ** argv) {
         }
 
         // Print performance stats.
-        llama_perf_sampler_print(smpl);  // from #include "llama.h"
+        // (Optional) If you'd like sampler-level performance stats, you could add
+        // a custom call here, e.g. common_sampler_print_stats(smpl), if desired.
         llama_perf_context_print(ctx);
 
         // Close the combined log
@@ -431,7 +428,7 @@ int main(int argc, char ** argv) {
 
         // ------------------------------------------------------------------
         // Clean up llama-related resources
-        llama_sampler_free(smpl);
+        common_sampler_free(smpl);
         llama_backend_free();
     }
 
