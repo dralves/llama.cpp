@@ -89,7 +89,32 @@ static std::string to_hex(const unsigned char * digest, size_t len = SHA256_DIGE
 }
 
 int main(int argc, char ** argv) {
-    // Parse command line flags (the same approach used in server.cpp).
+    // ------------------------------------------------------------------
+    // PARSE -o BEFORE calling common_params_parse
+    // We'll remove "-o" and its value from argv/argc so it doesn't confuse llama.cpp parser.
+
+    std::string outFileName = "determinism_results.txt";
+    {
+        int writeIndex = 1; // track how we shift argv
+        for (int readIndex = 1; readIndex < argc; readIndex++) {
+            if (std::string(argv[readIndex]) == "-o") {
+                // Check that we have another argument for the filename
+                if (readIndex + 1 < argc) {
+                    outFileName = argv[++readIndex];
+                } else {
+                    std::cerr << "Error: -o requires an output filename.\n";
+                    return 1;
+                }
+                // Skip storing "-o" or the filename in argv
+            } else {
+                argv[writeIndex++] = argv[readIndex];
+            }
+        }
+        argc = (argc > 1) ? writeIndex : 1;
+    }
+
+    // ------------------------------------------------------------------
+    // THEN call llama.cpp's argument parser, ignoring any removed -o
     common_params params;
     if (!common_params_parse(argc, argv, params, LLAMA_EXAMPLE_COMMON)) {
         std::cerr << "Error: Failed to parse arguments.\n";
@@ -100,23 +125,6 @@ int main(int argc, char ** argv) {
     common_init();
     llama_backend_init();
     llama_numa_init(params.numa);
-
-    // ------------------------------------------------------------------
-    // 1) Parse any custom argument -o for output file. Then handle if it exists.
-    std::string outFileName = "determinism_results.txt";
-
-    // Because you already rely on common_params_parse(argc, argv, ...),
-    // which might skip unknown arguments, here's a quick manual parse
-    for (int i = 1; i < argc; i++) {
-        if (std::string(argv[i]) == "-o") {
-            if (i + 1 < argc) {
-                outFileName = argv[++i];
-            } else {
-                std::cerr << "Error: -o requires an output filename.\n";
-                return 1;
-            }
-        }
-    }
 
     // If the file exists, we do NOT rename it. Instead we pick a new file name
     // (the next available .1, .2, etc.).
