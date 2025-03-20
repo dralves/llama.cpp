@@ -23,6 +23,7 @@ WORKDIR /app
 COPY . .
 ENV CUDA_DEVICES="none"
 ENV PROMPT_FILE=""
+ENV SEED="42"
 
 ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH}
 ENV LD_LIBRARY_PATH=/usr/lib/aarch64-linux-gnu:${LD_LIBRARY_PATH}
@@ -77,7 +78,7 @@ RUN mkdir -p /app/prompts
 # Used to check if the binary has all the shared libs it needs
 # ENTRYPOINT ["/bin/bash", "-c", "ldd ./llama-determinism-test"]
 
-ENTRYPOINT ["/bin/bash", "-c", "set -e; echo '== Running determinism-test using $MODEL_FILE =='; ./llama-determinism-test -f /app/prompts/$PROMPT_FILE --model $MODEL_FILE -o /app/results/results.txt --seed 42 -n 1000 --device $CUDA_DEVICES -ngl $NGL --repeat $REPEAT_COUNT"]
+ENTRYPOINT ["/bin/bash", "-c", "set -e; echo '== Running determinism-test using $MODEL_FILE =='; ./llama-determinism-test -f /app/prompts/$PROMPT_FILE --model $MODEL_FILE -o /app/results/results.txt --seed $SEED -n 1000 --device $CUDA_DEVICES -ngl $NGL --repeat $REPEAT_COUNT"]
 
 # Run with:
 # docker run --rm \
