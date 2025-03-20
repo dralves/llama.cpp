@@ -208,7 +208,11 @@ int main(int argc, char ** argv) {
 
     // We'll run the entire logic of reading prompts "repeatCount" times
     for (int rep = 0; rep < repeatCount; rep++) {
-        std::cerr << "== Iteration " << (rep + 1) << " of " << repeatCount << " ==\n";
+        {
+            std::stringstream ss;
+            ss << "== Iteration " << (rep + 1) << " of " << repeatCount << " ==\n";
+            my_custom_logger(GGML_LOG_LEVEL_INFO, ss.str().c_str(), nullptr);
+        }
 
         std::ifstream infile(params.prompt_file);
         if (!infile.is_open()) {
