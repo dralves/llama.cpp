@@ -148,4 +148,4 @@ poetry.toml
 /run-chat.sh
 
 # Determinism test results
-determinism_results*
+results/*.txt*
