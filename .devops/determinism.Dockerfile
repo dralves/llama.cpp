@@ -40,11 +40,6 @@ RUN if [ "$TARGETARCH" = "amd64-avx2" ]; then \
     -DBUILD_SHARED_LIBS_DEFAULT=OFF -DBUILD_SHARED_LIBS=OFF \
     -DGGML_NATIVE=OFF \
     -DGGML_CPU_ARM_ARCH=${GGML_CPU_ARM_ARCH}; \
-    elif [ "$TARGETARCH" = "macos-metal" ]; then \
-    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
-    -DBUILD_SHARED_LIBS_DEFAULT=OFF -DBUILD_SHARED_LIBS=OFF \
-    -DGGML_NATIVE=OFF \
-    -DGGML_METAL=ON; \
     elif [ "$TARGETARCH" = "cuda" ]; then \
     cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
     -DBUILD_SHARED_LIBS_DEFAULT=OFF -DBUILD_SHARED_LIBS=OFF \

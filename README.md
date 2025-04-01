@@ -1,5 +1,19 @@
 # llama.cpp
 
+To run the determinism-test:
+- Build the docker image for the arch you want:
+`./setup.sh --target-arch arm64-cpu`
+- Run the docker image:
+`docker run --rm \
+    -v "$(pwd)/models:/app/models" \
+    -v "$(pwd)/results:/app/results" \
+    -v "$(pwd)/prompts:/app/prompts" \
+    -e MODEL_FILE="/app/models/gemma-3-27b-it-Q4_K_M.gguf" \
+    -e PROMPT_FILE="sample.txt" \
+    -e SEED="42" \
+    -e CUDA_DEVICES="none" \
+    llama-cpp:arm64-cpu`
+
 ![llama](https://user-images.githubusercontent.com/1991296/230134379-7181e485-c521-4d23-a0d6-f7b3b61ba524.png)
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
