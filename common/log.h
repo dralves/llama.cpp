@@ -70,6 +70,12 @@ void common_log_set_colors    (struct common_log * log,       bool   colors);   
 void common_log_set_prefix    (struct common_log * log,       bool   prefix);     // whether to output prefix to each log
 void common_log_set_timestamps(struct common_log * log,       bool   timestamps); // whether to output timestamps in the prefix
 
+// Redirect logs to a custom callback instead of stdout/stderr. Pass NULL to disable
+typedef void (*common_log_callback_t)(int level, const char * msg);
+void common_log_set_callback(common_log_callback_t cb);
+// Enable or disable printing to stdout/stderr (default: enabled)
+void common_log_set_stdout_enabled(bool enabled);
+
 // helper macros for logging
 // use these to avoid computing log arguments if the verbosity of the log is higher than the threshold
 //

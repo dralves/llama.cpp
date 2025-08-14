@@ -155,6 +155,9 @@ private:
 
     // worker thread copies into this
     common_log_entry cur;
+    // optional callback redirection
+    common_log_callback_t callback = nullptr;
+    bool stdout_enabled = true;
 
 public:
     void add(enum ggml_log_level level, const char * fmt, va_list args) {
@@ -259,10 +262,17 @@ public:
                     break;
                 }
 
-                cur.print(); // stdout and stderr
+                if (stdout_enabled) {
+                    cur.print(); // stdout and stderr
+                }
 
                 if (file) {
                     cur.print(file);
+                }
+
+                if (callback) {
+                    // Ensure the message is null-terminated string
+                    callback((int)cur.level, cur.msg.data());
                 }
             }
         });
@@ -341,6 +351,16 @@ public:
 
         this->timestamps = timestamps;
     }
+
+    void set_callback(common_log_callback_t cb) {
+        std::lock_guard<std::mutex> lock(mtx);
+        callback = cb;
+    }
+
+    void set_stdout_enabled(bool enabled) {
+        std::lock_guard<std::mutex> lock(mtx);
+        stdout_enabled = enabled;
+    }
 };
 
 //
@@ -390,4 +410,12 @@ void common_log_set_prefix(struct common_log * log, bool prefix) {
 
 void common_log_set_timestamps(struct common_log * log, bool timestamps) {
     log->set_timestamps(timestamps);
+}
+
+void common_log_set_callback(common_log_callback_t cb) {
+    common_log_main()->set_callback(cb);
+}
+
+void common_log_set_stdout_enabled(bool enabled) {
+    common_log_main()->set_stdout_enabled(enabled);
 }
