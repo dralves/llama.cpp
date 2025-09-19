@@ -10,6 +10,9 @@
 #include <vector>
 
 int common_log_verbosity_thold = LOG_DEFAULT_LLAMA;
+static ggml_log_callback g_external_log_callback = nullptr;
+static void * g_external_log_user_data = nullptr;
+static bool g_stdout_enabled = true;
 
 void common_log_set_verbosity_thold(int verbosity) {
     common_log_verbosity_thold = verbosity;
@@ -66,14 +69,18 @@ struct common_log_entry {
                 return;
             }
 
-            fcur = stdout;
+            if (g_stdout_enabled) {
+                fcur = stdout;
 
-            if (level != GGML_LOG_LEVEL_NONE) {
-                fcur = stderr;
+                if (level != GGML_LOG_LEVEL_NONE) {
+                    fcur = stderr;
+                }
+            } else {
+                fcur = nullptr; // suppress stdio prints
             }
         }
 
-        if (level != GGML_LOG_LEVEL_NONE && level != GGML_LOG_LEVEL_CONT && prefix) {
+        if (fcur && level != GGML_LOG_LEVEL_NONE && level != GGML_LOG_LEVEL_CONT && prefix) {
             if (timestamp) {
                 // [M.s.ms.us]
                 fprintf(fcur, "%s%d.%02d.%03d.%03d%s ",
@@ -95,13 +102,22 @@ struct common_log_entry {
             }
         }
 
-        fprintf(fcur, "%s", msg.data());
+        if (fcur) {
+            fprintf(fcur, "%s", msg.data());
+        }
 
-        if (level == GGML_LOG_LEVEL_WARN || level == GGML_LOG_LEVEL_ERROR || level == GGML_LOG_LEVEL_DEBUG) {
+        if (fcur && (level == GGML_LOG_LEVEL_WARN || level == GGML_LOG_LEVEL_ERROR || level == GGML_LOG_LEVEL_DEBUG)) {
             fprintf(fcur, "%s", g_col[COMMON_LOG_COL_DEFAULT]);
         }
 
-        fflush(fcur);
+        if (fcur) {
+            fflush(fcur);
+        }
+
+        // forward to external callback only once per entry (when not printing to the file sink)
+        if (!file && g_external_log_callback) {
+            g_external_log_callback(level, msg.data(), g_external_log_user_data);
+        }
     }
 };
 
@@ -390,4 +406,13 @@ void common_log_set_prefix(struct common_log * log, bool prefix) {
 
 void common_log_set_timestamps(struct common_log * log, bool timestamps) {
     log->set_timestamps(timestamps);
+}
+
+void common_log_set_callback(ggml_log_callback log_callback, void * user_data) {
+    g_external_log_callback = log_callback;
+    g_external_log_user_data = user_data;
+}
+
+void common_log_set_stdout_enabled(bool enabled) {
+    g_stdout_enabled = enabled;
 }

@@ -70,6 +70,23 @@ void common_log_set_colors    (struct common_log * log,       bool   colors);   
 void common_log_set_prefix    (struct common_log * log,       bool   prefix);     // whether to output prefix to each log
 void common_log_set_timestamps(struct common_log * log,       bool   timestamps); // whether to output timestamps in the prefix
 
+// Redirect log messages to an external callback in addition to, or instead of,
+// writing to stdout/stderr. When a callback is set, it will be invoked for every
+// log entry produced by common_log_add.
+// If NULL is supplied, no callback will be invoked.
+// The callback type matches ggml's logging callback for compatibility.
+void common_log_set_callback(ggml_log_callback log_callback, void * user_data);
+
+// Convenience overload when no user_data is needed
+static inline void common_log_set_callback(ggml_log_callback log_callback) {
+    common_log_set_callback(log_callback, NULL);
+}
+
+// Enable or disable printing to stdout/stderr. When disabled, logs will still
+// be forwarded to the callback (if set) and any configured log file, but will
+// not be written to the standard streams.
+void common_log_set_stdout_enabled(bool enabled);
+
 // helper macros for logging
 // use these to avoid computing log arguments if the verbosity of the log is higher than the threshold
 //
