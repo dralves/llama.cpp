@@ -115,7 +115,7 @@ struct common_log_entry {
             }
         }
 
-        if (fcur && level != GGML_LOG_LEVEL_NONE && level != GGML_LOG_LEVEL_CONT && prefix) {
+        if (level != GGML_LOG_LEVEL_NONE && level != GGML_LOG_LEVEL_CONT && prefix) {
             if (timestamp) {
                 // [M.s.ms.us]
                 fprintf(fcur, "%s%d.%02d.%03d.%03d%s ",
@@ -139,13 +139,9 @@ struct common_log_entry {
 
         if (fcur) {
             fprintf(fcur, "%s", msg.data());
-        }
-
-        if (fcur && (level == GGML_LOG_LEVEL_WARN || level == GGML_LOG_LEVEL_ERROR || level == GGML_LOG_LEVEL_DEBUG)) {
-            fprintf(fcur, "%s", g_col[COMMON_LOG_COL_DEFAULT]);
-        }
-
-        if (fcur) {
+            if (level == GGML_LOG_LEVEL_WARN || level == GGML_LOG_LEVEL_ERROR || level == GGML_LOG_LEVEL_DEBUG) {
+                fprintf(fcur, "%s", g_col[COMMON_LOG_COL_DEFAULT]);
+            }
             fflush(fcur);
         }
 
